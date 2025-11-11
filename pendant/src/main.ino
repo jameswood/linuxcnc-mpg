@@ -1,34 +1,44 @@
 
 #include <Wire.h> 
-#include <ESPRotary.h>
+// #include <ESPRotary.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
 
-#include <esp_now.h>
-#include <esp_wifi.h>
-#include <WiFi.h>
+// #include <esp_now.h>
+// #include <esp_wifi.h>
+// #include <WiFi.h>
 
 
 #define ADC 14
 #define TFT_DC 33
 #define TFT_CS 34
+#define RST 8
 #define CLICKS_PER_STEP 4
 #define PSTEP 32
 
-SPIClass fspi = SPIClass(FSPI);
-Adafruit_ILI9341 tft = Adafruit_ILI9341(&fspi, TFT_DC, TFT_CS);
+// #define sd_cs  1
+// #define lcd_cs 10
 
-ESPRotary r1;
-ESPRotary r2;
-ESPRotary r3;
-ESPRotary r4;
+    // SPI.setRX(0);
+    // SPI.setCS(1);
+    // SPI.setSCK(2);
+    // SPI.setTX(3);
 
-uint8_t receiverAddress[] = {0x30, 0xAE, 0xA4, 0x7B, 0x79, 0x90};
-uint8_t myAddress[] = {0x94, 0x3C, 0xC6, 0x33, 0x68, 0x98};
-esp_now_peer_info_t peerInfo;
+SPISettings spisettings(1000000, MSBFIRST, SPI_MODE0);
+// SPIClass fspi = SPIClass(FSPI);
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_DC, TFT_CS);
 
-hw_timer_t *timer = NULL;
+// ESPRotary r1;
+// ESPRotary r2;
+// ESPRotary r3;
+// ESPRotary r4;
+
+// uint8_t receiverAddress[] = {0x30, 0xAE, 0xA4, 0x7B, 0x79, 0x90};
+// uint8_t myAddress[] = {0x94, 0x3C, 0xC6, 0x33, 0x68, 0x98};
+// esp_now_peer_info_t peerInfo;
+
+// hw_timer_t *timer = NULL;
 
 int col_pins[6] = {10, 8, 6, 4, 2, 1};
 int row_pins[4] = {7, 9, 5, 11};
@@ -56,13 +66,12 @@ struct rx_data_t {
     int8_t tool;
     int8_t aux;
 };
+
 const int rx_data_t_size = sizeof(rx_data_t);
 
 uint8_t last_mode = 255;
 rx_data_t last_values;
 float last_batt_voltage = -1.0;
-
-
 
 union rx_Data_t{
     rx_data_t values;
@@ -85,26 +94,25 @@ union tx_Data_t{
 };
 tx_Data_t tx_data;  
 
-
 uint8_t update = 0;
 
-void IRAM_ATTR handleLoop() {
-    r1.loop();
-    r2.loop();
-    r3.loop();
-    r4.loop();
-}
+// void IRAM_ATTR handleLoop() {
+//     r1.loop();
+//     r2.loop();
+//     r3.loop();
+//     r4.loop();
+// }
 
 
-void messageReceived(const uint8_t* macAddr, const uint8_t* incomingData, int len) {
-    memcpy(&rx_data.data, incomingData, sizeof(rx_data.data));
+// void messageReceived(const uint8_t* macAddr, const uint8_t* incomingData, int len) {
+    // memcpy(&rx_data.data, incomingData, sizeof(rx_data.data));
 
-    update_stats();
+    // update_stats();
 
-    esp_err_t result = esp_now_send(receiverAddress, (uint8_t *) &tx_data.data, sizeof(tx_data.data));
-    if (result != ESP_OK) {
-    }
-}
+    // esp_err_t result = esp_now_send(receiverAddress, (uint8_t *) &tx_data.data, sizeof(tx_data.data));
+    // if (result != ESP_OK) {
+    // }
+// }
 
 
 void display_clear() {
@@ -162,8 +170,8 @@ void display_clear() {
 void setup() {
     uint8_t n = 0;
     Serial.begin(115200);
-    Serial.setTimeout(10);
-
+    while (!Serial);
+    Serial.println("hello");
     for (n = 0; n < 6; n++) {
         pinMode(col_pins[n], OUTPUT);
         digitalWrite(col_pins[n], 1);
@@ -173,38 +181,42 @@ void setup() {
     pinMode(row_pins[2], INPUT_PULLUP);
     pinMode(row_pins[3], INPUT);
 
-    fspi.begin(36, 37, 35, TFT_CS);
+    SPI.begin();
+
+    delay(5000);
+
+    // fspi.begin(36, 37, 35, TFT_CS);
     tft.begin(78000000);
 
     display_clear();
 
-    r1.begin(13, 12, CLICKS_PER_STEP);
-    r2.begin(16, 17, CLICKS_PER_STEP);
-    r3.begin(18, 21, CLICKS_PER_STEP);
-    r4.begin(38, 37, CLICKS_PER_STEP);
-    timer = timerBegin(0, 80, true);
-    timerAttachInterrupt(timer, &handleLoop, true);
-    timerAlarmWrite(timer, 100, true);
-    timerAlarmEnable(timer);
+    // r1.begin(13, 12, CLICKS_PER_STEP);
+    // r2.begin(16, 17, CLICKS_PER_STEP);
+    // r3.begin(18, 21, CLICKS_PER_STEP);
+    // r4.begin(38, 37, CLICKS_PER_STEP);
+    // timer = timerBegin(0, 80, true);
+    // timerAttachInterrupt(timer, &handleLoop, true);
+    // timerAlarmWrite(timer, 100, true);
+    // timerAlarmEnable(timer);
 
-    WiFi.mode(WIFI_STA);
-    esp_wifi_set_mac(WIFI_IF_STA, myAddress);
+    // WiFi.mode(WIFI_STA);
+    // esp_wifi_set_mac(WIFI_IF_STA, myAddress);
 
-    if (esp_now_init() == ESP_OK) {
+    // if (esp_now_init() == ESP_OK) {
         //Serial.println("ESPNow Init success");
-    } else {
+    // } else {
         //Serial.println("ESPNow Init fail");
-        return;
-    }
-    esp_now_register_recv_cb(messageReceived);
+        // return;
+    // }
+    // esp_now_register_recv_cb(messageReceived);
 
-    memcpy(peerInfo.peer_addr, receiverAddress, 6);
-    peerInfo.channel = 0;
-    peerInfo.encrypt = false;
-    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    // memcpy(peerInfo.peer_addr, receiverAddress, 6);
+    // peerInfo.channel = 0;
+    // peerInfo.encrypt = false;
+    // if (esp_now_add_peer(&peerInfo) != ESP_OK) {
         //Serial.println("Failed to add peer");
-        return;
-    }
+        // return;
+    // }
 
 }
 
@@ -255,8 +267,8 @@ void update_stats() {
         }
     }
 
-    tx_data.values.jog = r1.getPosition();
-    r1.resetPosition(0);
+    // tx_data.values.jog = r1.getPosition();
+    // r1.resetPosition(0);
 
 
     tx_data.values.buttons = 0;
@@ -284,19 +296,19 @@ void loop() {
     uint8_t n = 0;
     uint8_t nr = 0;
 
-    float batt_voltage = 0.0;
+    // float batt_voltage = 0.0;
 
 
-    for (n = 0; n < 100; n++) {
-        batt_voltage += (float)analogRead(ADC);
-    }
-    batt_voltage = batt_voltage / 100.0 / 1500.0;
+    // for (n = 0; n < 100; n++) {
+    //     batt_voltage += (float)analogRead(ADC);
+    // }
+    // batt_voltage = batt_voltage / 100.0 / 1500.0;
 
 
     matrix_read();
-    tx_data.values.ow_feed = r2.getPosition();
-    tx_data.values.ow_rapid = r3.getPosition();
-    tx_data.values.ow_spindle = r4.getPosition();
+    // tx_data.values.ow_feed = r2.getPosition();
+    // tx_data.values.ow_rapid = r3.getPosition();
+    // tx_data.values.ow_spindle = r4.getPosition();
 
     uint8_t rx_buffer[rx_data_t_size];
     uint8_t tx_buffer[tx_data_t_size];
