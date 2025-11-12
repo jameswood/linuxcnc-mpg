@@ -1,47 +1,44 @@
-
-#include <Wire.h> 
-// #include <ESPRotary.h>
+#include <Arduino.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_ILI9341.h>
+#include <Adafruit_ST7735.h>
+#include <RotaryEncoder.h>
 
-// #include <esp_now.h>
-// #include <esp_wifi.h>
-// #include <WiFi.h>
+#define ADC 26      // ADC0. - battery (not used for pico)
+
+#define TFT_CS 17
+#define TFT_CLK 18
+#define TFT_MOSI 19
+#define TFT_DC 20
+#define TFT_RST 21
+
+// bool setRX(NOT_A_PIN); // or setMISO()
+// bool setCS(TFT_CS);
+// bool setSCK(18);
+// bool setTX(19); // or setMOSI()
 
 
-#define ADC 14
-#define TFT_DC 33
-#define TFT_CS 34
-#define RST 8
 #define CLICKS_PER_STEP 4
 #define PSTEP 32
 
-// #define sd_cs  1
-// #define lcd_cs 10
-
-    // SPI.setRX(0);
-    // SPI.setCS(1);
-    // SPI.setSCK(2);
-    // SPI.setTX(3);
-
 SPISettings spisettings(1000000, MSBFIRST, SPI_MODE0);
-// SPIClass fspi = SPIClass(FSPI);
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_DC, TFT_CS);
+// Adafruit_ST7735 tft = Adafruit_ST7735(TFT_DC, TFT_CS);
+// int8_t cs, int8_t dc, int8_t mosi, int8_t sclk, int8_t rst
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST);
 
-// ESPRotary r1;
-// ESPRotary r2;
-// ESPRotary r3;
-// ESPRotary r4;
+RotaryEncoder *encoder[4] = { nullptr, nullptr, nullptr, nullptr };
 
-// uint8_t receiverAddress[] = {0x30, 0xAE, 0xA4, 0x7B, 0x79, 0x90};
-// uint8_t myAddress[] = {0x94, 0x3C, 0xC6, 0x33, 0x68, 0x98};
-// esp_now_peer_info_t peerInfo;
+void handleLoop(){
+    for( uint8_t e = 0; e < 4; e++ ){
+        encoder[e]->tick(); // just call tick() to check the state.
+    }
+}
 
 // hw_timer_t *timer = NULL;
 
 int col_pins[6] = {10, 8, 6, 4, 2, 1};
 int row_pins[4] = {7, 9, 5, 11};
+int encoder_pins[4][2] = {{10, 11}, {12, 13}, {14, 15}, {16, 17}};
 
 uint8_t sw_stat[3][6] = {
     {0, 0, 0, 0, 0, 0},
@@ -96,44 +93,25 @@ tx_Data_t tx_data;
 
 uint8_t update = 0;
 
-// void IRAM_ATTR handleLoop() {
-//     r1.loop();
-//     r2.loop();
-//     r3.loop();
-//     r4.loop();
-// }
-
-
-// void messageReceived(const uint8_t* macAddr, const uint8_t* incomingData, int len) {
-    // memcpy(&rx_data.data, incomingData, sizeof(rx_data.data));
-
-    // update_stats();
-
-    // esp_err_t result = esp_now_send(receiverAddress, (uint8_t *) &tx_data.data, sizeof(tx_data.data));
-    // if (result != ESP_OK) {
-    // }
-// }
-
-
 void display_clear() {
-    tft.fillScreen(ILI9341_BLACK);
+    tft.fillScreen(ST7735_BLACK);
     tft.setRotation(3);
-    tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
+    tft.setTextColor(ST7735_WHITE, ST7735_BLACK);
 
-    tft.drawRect(1, 1, 202, 6 * PSTEP + 5 + 2, ILI9341_WHITE);
-    tft.drawRect(2, 2, 200, 6 * PSTEP + 5, ILI9341_LIGHTGREY);
+    tft.drawRect(1, 1, 202, 6 * PSTEP + 5 + 2, ST7735_WHITE);
+    tft.drawRect(2, 2, 200, 6 * PSTEP + 5, ST7735_BLUE);
 
     tft.setTextSize(3);
-    tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+    tft.setTextColor(ST7735_RED, ST7735_BLACK);
     tft.setCursor(10, 10 + 0 * PSTEP);
     tft.print("X: ");
-    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+    tft.setTextColor(ST7735_GREEN, ST7735_BLACK);
     tft.setCursor(10, 10 + 1 * PSTEP);
     tft.print("Y: ");
-    tft.setTextColor(ILI9341_BLUE, ILI9341_BLACK);
+    tft.setTextColor(ST7735_BLUE, ST7735_BLACK);
     tft.setCursor(10, 10 + 2 * PSTEP);
     tft.print("Z: ");
-    tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+    tft.setTextColor(ST7735_YELLOW, ST7735_BLACK);
     if ((rx_data.values.stats & (1<<0)) == 0) {
         tft.setCursor(10, 10 + 3 * PSTEP);
         tft.print("A: ");
@@ -171,7 +149,7 @@ void setup() {
     uint8_t n = 0;
     Serial.begin(115200);
     while (!Serial);
-    Serial.println("hello");
+    Serial.println("PicoMPG OK");
     for (n = 0; n < 6; n++) {
         pinMode(col_pins[n], OUTPUT);
         digitalWrite(col_pins[n], 1);
@@ -181,43 +159,25 @@ void setup() {
     pinMode(row_pins[2], INPUT_PULLUP);
     pinMode(row_pins[3], INPUT);
 
+    // Latch Modes
+    // • FOUR0: encoder pins are always LOW in latch position.
+    // • FOUR3: encoder pins are always HIGH in latch position.
+    // • TWO03: encoder pins are both LOW or HIGH in latch position.
+    for (uint8_t e = 0; e < 4; e++){
+        encoder[e] = new RotaryEncoder(
+            encoder_pins[e][0],
+            encoder_pins[e][1],
+            RotaryEncoder::LatchMode::TWO03
+        );
+        // register interrupt routine
+        attachInterrupt(digitalPinToInterrupt(encoder_pins[e][0]), handleLoop, CHANGE);
+        attachInterrupt(digitalPinToInterrupt(encoder_pins[e][1]), handleLoop, CHANGE);
+    }
+
     SPI.begin();
-
-    delay(5000);
-
-    // fspi.begin(36, 37, 35, TFT_CS);
-    tft.begin(78000000);
-
+    // tft.begin(78000000);
     display_clear();
-
-    // r1.begin(13, 12, CLICKS_PER_STEP);
-    // r2.begin(16, 17, CLICKS_PER_STEP);
-    // r3.begin(18, 21, CLICKS_PER_STEP);
-    // r4.begin(38, 37, CLICKS_PER_STEP);
-    // timer = timerBegin(0, 80, true);
-    // timerAttachInterrupt(timer, &handleLoop, true);
-    // timerAlarmWrite(timer, 100, true);
-    // timerAlarmEnable(timer);
-
-    // WiFi.mode(WIFI_STA);
-    // esp_wifi_set_mac(WIFI_IF_STA, myAddress);
-
-    // if (esp_now_init() == ESP_OK) {
-        //Serial.println("ESPNow Init success");
-    // } else {
-        //Serial.println("ESPNow Init fail");
-        // return;
-    // }
-    // esp_now_register_recv_cb(messageReceived);
-
-    // memcpy(peerInfo.peer_addr, receiverAddress, 6);
-    // peerInfo.channel = 0;
-    // peerInfo.encrypt = false;
-    // if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-        //Serial.println("Failed to add peer");
-        // return;
-    // }
-
+    
 }
 
 
@@ -267,9 +227,8 @@ void update_stats() {
         }
     }
 
-    // tx_data.values.jog = r1.getPosition();
-    // r1.resetPosition(0);
-
+    tx_data.values.jog = encoder[0] -> getPosition();
+    encoder[0] -> setPosition(0);
 
     tx_data.values.buttons = 0;
     for (n = 0; n < 6; n++) {
@@ -296,19 +255,10 @@ void loop() {
     uint8_t n = 0;
     uint8_t nr = 0;
 
-    // float batt_voltage = 0.0;
-
-
-    // for (n = 0; n < 100; n++) {
-    //     batt_voltage += (float)analogRead(ADC);
-    // }
-    // batt_voltage = batt_voltage / 100.0 / 1500.0;
-
-
     matrix_read();
-    // tx_data.values.ow_feed = r2.getPosition();
-    // tx_data.values.ow_rapid = r3.getPosition();
-    // tx_data.values.ow_spindle = r4.getPosition();
+    tx_data.values.ow_feed = encoder[1] -> getPosition();
+    tx_data.values.ow_rapid = encoder[2] -> getPosition();
+    tx_data.values.ow_spindle = encoder[3] -> getPosition();
 
     uint8_t rx_buffer[rx_data_t_size];
     uint8_t tx_buffer[tx_data_t_size];
@@ -329,26 +279,26 @@ void loop() {
     }
 
     tft.setTextSize(2);
-    tft.setTextColor(ILI9341_LIGHTGREY, ILI9341_BLACK);
+    tft.setTextColor(ST7735_BLUE, ST7735_BLACK);
 
     tft.setCursor(2, 5 + 4 * 45 + 25);
     if ((rx_data.values.stats & (1<<1)) != 0) {
-        tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+        tft.setTextColor(ST7735_GREEN, ST7735_BLACK);
         tft.print("On  ");
     } else {
-        tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+        tft.setTextColor(ST7735_RED, ST7735_BLACK);
         tft.print("Off ");
     }
     tft.setCursor(65, 5 + 4 * 45 + 25);
     if ((rx_data.values.stats & (1<<2)) != 0) {
-        tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+        tft.setTextColor(ST7735_GREEN, ST7735_BLACK);
         tft.print("RUN  ");
     } else {
-        tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+        tft.setTextColor(ST7735_RED, ST7735_BLACK);
         tft.print("STOP ");
     }
 
-    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+    tft.setTextColor(ST7735_GREEN, ST7735_BLACK);
     tft.setCursor(142, 5 + 4 * 45 + 25);
     if ((rx_data.values.stats & (1<<3)) != 0) {
         tft.print("AUTO ");
@@ -357,7 +307,7 @@ void loop() {
     } else if ((rx_data.values.stats & (1<<5)) != 0) {
         tft.print("MDI  ");
     } else {
-        tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+        tft.setTextColor(ST7735_RED, ST7735_BLACK);
         tft.print(" --  ");
     }
 
@@ -374,9 +324,9 @@ void loop() {
             if (last_values.leds != rx_data.values.leds || last_values.pos[n] != rx_data.values.pos[n]) {
                 last_values.pos[n] = rx_data.values.pos[n];
                 if ((rx_data.values.leds & (1<<(8+n))) != 0) {
-                    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+                    tft.setTextColor(ST7735_GREEN, ST7735_BLACK);
                 } else {
-                    tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+                    tft.setTextColor(ST7735_RED, ST7735_BLACK);
                 }
                 tft.setCursor(50, 10 + n * PSTEP);
                 sprintf(tmp_str, "%08.2f", rx_data.values.pos[n]);
@@ -395,9 +345,9 @@ void loop() {
             if (last_values.leds != rx_data.values.leds || last_values.pos[n] != rx_data.values.pos[n]) {
                 last_values.pos[n] = rx_data.values.pos[n];
                 if ((rx_data.values.leds & (1<<(8+n))) != 0) {
-                    tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+                    tft.setTextColor(ST7735_GREEN, ST7735_BLACK);
                 } else {
-                    tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
+                    tft.setTextColor(ST7735_RED, ST7735_BLACK);
                 }
                 tft.setCursor(50, 10 + n * PSTEP);
                 sprintf(tmp_str, "%08.2f", rx_data.values.pos[n]);
@@ -410,23 +360,23 @@ void loop() {
         tft.setTextSize(1);
         tft.setCursor(90, 10 + 5 * PSTEP - 1);
         if ((rx_data.values.stats & (1<<6)) != 0) {
-            tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+            tft.setTextColor(ST7735_GREEN, ST7735_BLACK);
         } else {
-            tft.setTextColor(ILI9341_DARKGREY, ILI9341_BLACK);
+            tft.setTextColor(ST7735_BLUE, ST7735_BLACK);
         }
         tft.print("mist");
 
         tft.setCursor(90, 10 + 5 * PSTEP + 10);
         if ((rx_data.values.stats & (1<<7)) != 0) {
-            tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+            tft.setTextColor(ST7735_GREEN, ST7735_BLACK);
         } else {
-            tft.setTextColor(ILI9341_DARKGREY, ILI9341_BLACK);
+            tft.setTextColor(ST7735_BLUE, ST7735_BLACK);
         }
         tft.print("flood");
 
         // speed
         tft.setTextSize(3);
-        tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
+        tft.setTextColor(ST7735_GREEN, ST7735_BLACK);
         if (last_values.spindle_speed != rx_data.values.spindle_speed) {
             tft.setCursor(105, 10 + 4 * PSTEP);
             sprintf(tmp_str, "%05.0f", rx_data.values.spindle_speed * 60.0);
@@ -446,11 +396,11 @@ void loop() {
         last_values.ow_feed = rx_data.values.ow_feed;
         nr = 0;
         tft.setTextSize(1);
-        tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+        tft.setTextColor(ST7735_YELLOW, ST7735_BLACK);
         tft.setCursor(215, 5 + nr * 47 + 2);
         tft.print("Feed:");
         tft.setTextSize(3);
-        tft.setTextColor(ILI9341_BLUE, ILI9341_BLACK);
+        tft.setTextColor(ST7735_BLUE, ST7735_BLACK);
         tft.setCursor(230+16, 5 + nr * 45 + 25);
         sprintf(tmp_str, "%3i%%", rx_data.values.ow_feed);
         tft.print(tmp_str);
@@ -460,11 +410,11 @@ void loop() {
         last_values.ow_rapid = rx_data.values.ow_rapid;
         nr = 1;
         tft.setTextSize(1);
-        tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+        tft.setTextColor(ST7735_YELLOW, ST7735_BLACK);
         tft.setCursor(215, 5 + nr * 47 + 2);
         tft.print("Rapid:");
         tft.setTextSize(3);
-        tft.setTextColor(ILI9341_BLUE, ILI9341_BLACK);
+        tft.setTextColor(ST7735_BLUE, ST7735_BLACK);
         tft.setCursor(230+16, 5 + nr * 45 + 25);
         sprintf(tmp_str, "%3i%%", rx_data.values.ow_rapid);
         tft.print(tmp_str);
@@ -474,27 +424,13 @@ void loop() {
         last_values.ow_spindle = rx_data.values.ow_spindle;
         nr = 2;
         tft.setTextSize(1);
-        tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+        tft.setTextColor(ST7735_YELLOW, ST7735_BLACK);
         tft.setCursor(215, 5 + nr * 47 + 2);
         tft.print("Spindle:");
         tft.setTextSize(3);
-        tft.setTextColor(ILI9341_BLUE, ILI9341_BLACK);
+        tft.setTextColor(ST7735_BLUE, ST7735_BLACK);
         tft.setCursor(230+16, 5 + nr * 45 + 25);
         sprintf(tmp_str, "%3i%%", rx_data.values.ow_spindle);
-        tft.print(tmp_str);
-    }
-
-    if (last_batt_voltage != batt_voltage) {
-        last_batt_voltage != batt_voltage;
-        nr = 3;
-        tft.setTextSize(1);
-        tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
-        tft.setCursor(215, 5 + nr * 47 + 2);
-        tft.print("BATT:");
-        tft.setTextSize(3);
-        tft.setTextColor(ILI9341_BLUE, ILI9341_BLACK);
-        tft.setCursor(230, 5 + nr * 45 + 25);
-        sprintf(tmp_str, "%0.2fV", batt_voltage);
         tft.print(tmp_str);
     }
 
@@ -502,11 +438,11 @@ void loop() {
         last_values.jog_scale = rx_data.values.jog_scale;
         nr = 4;
         tft.setTextSize(1);
-        tft.setTextColor(ILI9341_YELLOW, ILI9341_BLACK);
+        tft.setTextColor(ST7735_YELLOW, ST7735_BLACK);
         tft.setCursor(215, 5 + nr * 47 + 2);
         tft.print("Jog-Scale:");
         tft.setTextSize(3);
-        tft.setTextColor(ILI9341_BLUE, ILI9341_BLACK);
+        tft.setTextColor(ST7735_BLUE, ST7735_BLACK);
         tft.setCursor(230, 5 + nr * 45 + 25);
         sprintf(tmp_str, "%04.3f", rx_data.values.jog_scale);
         tft.print(tmp_str);
